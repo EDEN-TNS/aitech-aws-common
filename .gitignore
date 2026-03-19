@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.npm
+
+# Package managers
+yarn-error.log
+package-lock.json  # npm 사용 시, yarn.lock npm 사용 안 할 시 주석 해제
+yarn.lock         # yarn 사용 시
+
+# Build outputs (TypeScript/JavaScript)
+dist/
+dist-electron/
+release/
+build/
+out/
+*.js.map
+*.d.ts
+*.tsbuildinfo
+.vite/
+.vite/deps/  # node_modules 내 기본 위치지만 명시적 무시 추천
+
+# Generated files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+.psci
+output
+yarn.lock
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+.claude
+.ec2-setup.env
+
+# Test coverage
+coverage/
+.nyc_output
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# macOS
+.DS_Store
+*.local
+
+# Etc
+.eslintcache
+.stylelintcache
