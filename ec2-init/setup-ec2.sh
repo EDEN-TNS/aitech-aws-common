@@ -26,10 +26,10 @@ read_var() {
   fi
   
   if [[ -n "$default" ]]; then
-    read -p "$prompt [기본: $default]: " value
+    read -p "$prompt [기본: $default]: " value </dev/tty || value=""
     value=${value:-$default}
   else
-    read -p "$prompt: " value
+    read -p "$prompt: " value </dev/tty || value=""
   fi
   
   echo "$varname=\"$value\""
@@ -63,7 +63,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
   create_env
 else
   log ".env 파일 존재. 재사용? (y/n)"
-  read -r reuse
+  read -r reuse </dev/tty || reuse="y"
   [[ "$reuse" != "y" && "$reuse" != "Y" ]] && create_env
   source "$ENV_FILE"
 fi
