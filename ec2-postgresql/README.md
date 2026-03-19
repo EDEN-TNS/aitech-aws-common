@@ -38,18 +38,18 @@ curl -O https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/
 `.env` 파일이 준비되었다면, 아래 명령어를 통해 PostgreSQL 컨테이너를 백그라운드에서 실행합니다.
 
 ```bash
-docker compose up -d
+docker-compose up -d
 ```
 
 ## 확인 사항
 
 - 정상 실행 확인:
   ```bash
-  docker compose ps
+  docker-compose ps
   ```
 - 컨테이너 로그 확인:
   ```bash
-  docker compose logs -f
+  docker-compose logs -f
   ```
 
 ## 데이터 영속성 (Data Persistence)

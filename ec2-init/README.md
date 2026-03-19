@@ -61,5 +61,5 @@ curl -fsSL https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/hea
 
 - `.env` 설정 확인: `cat ~/ec2-setup.env`
 - 타임존 설정 확인: `timedatectl`
-- Docker Compose 버젼 확인: `docker compose version`
+- Docker Compose 버젼 확인: `docker-compose version`
 - Route53 DDNS 시스템 서비스 상태: `systemctl status update-route53`
