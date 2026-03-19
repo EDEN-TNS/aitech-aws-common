@@ -97,16 +97,16 @@ sudo systemctl start docker
 sudo systemctl enable docker
 sudo usermod -aG docker ec2-user
 
-sudo mkdir -p /usr/local/lib/docker/cli-plugins
-LATEST_COMPOSE=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep browser_download_url | grep linux | grep -v checksum | head -1 | cut -d '"' -f 4)
-sudo curl -L "$LATEST_COMPOSE" -o /usr/local/lib/docker/cli-plugins/docker-compose
-sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-log "Docker Compose: $(docker compose version --short)"
+# sudo mkdir -p /usr/local/lib/docker/cli-plugins
+# LATEST_COMPOSE=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep browser_download_url | grep linux | grep -v checksum | head -1 | cut -d '"' -f 4)
+# sudo curl -L "$LATEST_COMPOSE" -o /usr/local/lib/docker/cli-plugins/docker-compose
+# sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+# log "Docker Compose: $(docker compose version --short)"
 
 # sudo rm /usr/local/lib/docker/cli-plugins/docker-compose
-# sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-# sudo chmod +x /usr/local/bin/docker-compose
-# log "Docker Compose: $(docker-compose version --short)" # 또는 docker compose version
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+log "Docker Compose: $(docker-compose version --short)" # 또는 docker compose version
 
 
 # 4. Route53 환경 배포 및 스크립트 업데이트
