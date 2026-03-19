@@ -6,6 +6,7 @@
 
 - `docker-compose.yml`: PostgreSQL 컨테이너 배포 및 설정 정의 파일
 - `.env.sample`: 환경 변수 설정 예시 파일 (실행 전에 `.env`로 복사하여 사용)
+- `init.sql`: pgvector 확장을 자동으로 활성화하기 위한 DB 초기화 스크립트
 
 ## 파일 다운로드
 
@@ -18,6 +19,7 @@ mkdir -p ec2-postgresql && cd ec2-postgresql
 # 필요한 파일들 다운로드 (curl)
 curl -O https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/main/ec2-postgresql/docker-compose.yml
 curl -O https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/main/ec2-postgresql/.env.sample
+curl -O https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/main/ec2-postgresql/init.sql
 ```
 
 ## 환경 변수 설정

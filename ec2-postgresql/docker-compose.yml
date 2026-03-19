@@ -1,7 +1,8 @@
 version: '3.9'
 services:
   postgres:
-    image: postgres:16
+    # 기본 postgres 대신 pgvector 확장이 포함된 공식 이미지를 사용합니다.
+    image: pgvector/pgvector:pg16
     restart: always
     env_file:
       - .env
@@ -13,6 +14,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
 volumes:
   pgdata:
