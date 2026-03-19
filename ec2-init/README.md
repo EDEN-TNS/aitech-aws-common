@@ -45,14 +45,14 @@
 
 ### 방법 1: 스크립트 다운로드 후 실행
 ```bash
-curl -O https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/ec2-init/refs/heads/main/setup-ec2.sh
+curl -O https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/main/ec2-init/setup-ec2.sh
 chmod +x setup-ec2.sh
 sudo ./setup-ec2.sh
 ```
 
 ### 방법 2: 파이프라인을 통해 즉시 실행
 ```bash
-curl -fsSL https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/ec2-init/refs/heads/main/setup-ec2.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/main/ec2-init/setup-ec2.sh | sudo bash
 ```
 
 ## 확인 사항
