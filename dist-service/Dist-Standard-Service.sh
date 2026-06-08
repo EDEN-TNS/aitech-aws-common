@@ -2,10 +2,14 @@
 # ─────────────────────────────────────────────────────────────────────
 # Dist-Standard-Service.sh
 #
+# 범용 배포 부트스트랩. Dist-Guardrails-Service.sh 와 동일한 OS / git / gh /
+# compose 흐름을 사용하지만, 저장소 목록을 하드코딩된 Guardrails 구성 요소
+# 집합 대신 -I / --input 으로 사용자가 직접 지정한다.
 # Generic distribution bootstrap. Same OS / git / gh / compose flow as
 # Dist-Guardrails-Service.sh, but the repo list is supplied by the user
 # via -I / --input instead of the hard-coded Guardrails component set.
 #
+# 사용법:
 # Usage:
 #   ./Dist-Standard-Service.sh \
 #       -I "https://github.com/acme/svc-a https://github.com/acme/svc-b"
@@ -33,23 +37,38 @@ die()  { err "$*"; exit 1; }
 
 usage() {
   cat <<'EOF'
+Dist-Standard-Service.sh — 범용 저장소 + compose 부트스트랩
 Dist-Standard-Service.sh — generic repo + compose bootstrap
 
+필수:
 Required:
+  -I, --input  <repos>     공백으로 구분된 git 저장소 URL 목록 (하나 또는 여러 개).
+                           셸이 하나의 인자로 유지하도록 전체 값을 따옴표로 감싸세요.
   -I, --input  <repos>     Space-separated list of git repo URLs (one or many).
                            Quote the whole value so the shell keeps it as one arg.
 
+선택:
 Optional:
+  -w, --workspace <dir>    저장소를 clone 할 워크스페이스 디렉터리.
+                           생략하면 스크립트가 실행 중에 묻습니다:
+                             1) 현재 디렉터리 (./)   [기본값]
+                             2) 상위 디렉터리  (../)
+                             3) 사용자 지정 경로
   -w, --workspace <dir>    Workspace dir to clone repos into.
                            If omitted, the script asks at runtime:
                              1) current dir (./)   [default]
                              2) parent dir  (../)
                              3) custom path
+  -o, --ops <name>         Makefile / docker-compose*.yml 을 보유한 저장소 이름.
+                           --input 의 첫 번째 저장소를 기본값으로 사용합니다.
   -o, --ops <name>         Repo name that holds Makefile / docker-compose*.yml.
                            Defaults to the first repo in --input.
+      --no-run             대화형 compose 메뉴를 건너뜁니다.
       --no-run             Skip the interactive compose menu.
+  -h, --help               이 도움말을 표시합니다.
   -h, --help               Show this help.
 
+예시:
 Examples:
   ./Dist-Standard-Service.sh -I "https://github.com/acme/svc-a https://github.com/acme/svc-b"
   ./Dist-Standard-Service.sh --input "git@github.com:acme/ops.git git@github.com:acme/api.git" \
@@ -138,7 +157,7 @@ detect_os() {
           *debian*|*ubuntu*)
             OS_FAMILY="debian"; PKG_MGR="apt"
             PKG_INSTALL="sudo apt-get update && sudo apt-get install -y" ;;
-          *fedora*|*rhel*|*centos*)
+          *fedora*|*rhel*|*centos*|*rocky*|*almalinux*)
             OS_FAMILY="fedora"
             if command -v dnf >/dev/null 2>&1; then PKG_MGR="dnf"; else PKG_MGR="yum"; fi
             PKG_INSTALL="sudo ${PKG_MGR} install -y" ;;
@@ -289,6 +308,47 @@ install_docker_debian() {
     docker-buildx-plugin docker-compose-plugin
 }
 
+# Install Docker on RHEL family (Rocky, AlmaLinux, CentOS, RHEL, Fedora) via
+# Docker's official dnf/yum repo. Required because RHEL base repos do NOT ship
+# docker-ce or docker-compose-plugin — 'dnf install docker' only pulls the
+# podman-docker shim, which has no 'docker compose' subcommand.
+install_docker_rhel() {
+  log "Installing Docker via Docker official ${PKG_MGR} repo"
+  # Drop podman-docker shim if present — its fake 'docker' lacks compose v2.
+  sudo "${PKG_MGR}" remove -y podman-docker 2>/dev/null || true
+
+  # config-manager plugin: dnf-plugins-core (dnf) or yum-utils (yum).
+  if command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y dnf-plugins-core
+  else
+    sudo yum install -y yum-utils
+  fi
+
+  # download.docker.com hosts centos/, rhel/, fedora/ paths only.
+  # Rocky / AlmaLinux / CentOS Stream all use the centos repo ($releasever
+  # in docker-ce.repo resolves correctly on EL8/EL9).
+  local repo_distro
+  case "$(. /etc/os-release && echo "${ID}")" in
+    fedora) repo_distro="fedora" ;;
+    rhel)   repo_distro="rhel" ;;
+    *)      repo_distro="centos" ;;
+  esac
+  local repo_url="https://download.docker.com/linux/${repo_distro}/docker-ce.repo"
+
+  # dnf4 (Rocky 8/9) uses 'config-manager --add-repo'; dnf5 (Fedora 41+) uses
+  # 'config-manager addrepo --from-repofile='. Try dnf4 form, then dnf5, then yum.
+  if command -v dnf >/dev/null 2>&1; then
+    sudo dnf config-manager --add-repo "${repo_url}" 2>/dev/null \
+      || sudo dnf config-manager addrepo --from-repofile="${repo_url}"
+  else
+    sudo yum-config-manager --add-repo "${repo_url}"
+  fi
+
+  sudo "${PKG_MGR}" install -y \
+    docker-ce docker-ce-cli containerd.io \
+    docker-buildx-plugin docker-compose-plugin
+}
+
 ensure_docker() {
   # 1. binary
   if ! command -v docker >/dev/null 2>&1; then
@@ -301,7 +361,7 @@ ensure_docker() {
             repair_apt_gh_keyring
             install_docker_debian
             ;;
-          fedora) install_pkg "docker docker-compose-plugin" ;;
+          fedora) install_docker_rhel ;;
           arch)   install_pkg "docker docker-compose" ;;
           *)      die "Unsupported Linux family for docker install: ${OS_FAMILY}" ;;
         esac
@@ -388,7 +448,7 @@ ensure_docker() {
         repair_apt_gh_keyring
         install_docker_debian
         ;;
-      fedora) install_pkg "docker-compose-plugin" ;;
+      fedora) install_docker_rhel ;;
       arch)   install_pkg "docker-compose" ;;
       *)      warn "Install 'docker compose' v2 plugin manually for ${OS_KIND}" ;;
     esac
