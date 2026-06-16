@@ -236,7 +236,46 @@ finalize_docker_access → docker group 미적용 시 sg docker 서브셸 제안
 
 ### 실행 방법
 
+> REPL 모드는 TTY가 필요합니다. `curl … | bash` 처럼 stdin을 파이프로 점유하면 REPL이 동작하지 않습니다.
+> **REPL 모드 원격 실행 권장 방식은 프로세스 치환** `bash <(curl …)` 입니다.
+
+#### 방법 1 (권장): 프로세스 치환
+
 ```bash
+# REPL 모드 — 원격 스크립트를 바로 실행 (stdin은 터미널 유지)
+bash <(curl -fsSL https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/main/dist-service/dist-ss-tui.sh)
+
+# 저장소 사전 지정 후 REPL 진입
+bash <(curl -fsSL https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/main/dist-service/dist-ss-tui.sh) \
+  -I "https://github.com/org/svc-a https://github.com/org/svc-b"
+
+# 주요 설정 사전 지정 후 REPL 진입
+bash <(curl -fsSL https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/main/dist-service/dist-ss-tui.sh) \
+  -I "git@github.com:org/ops.git" -w ~/work -o ops
+```
+
+#### 방법 1-alt: 파이프 (`curl | bash -s --`) — 비대화형 전용
+
+```bash
+# REPL 불가. --cli 또는 --no-run 과 함께 비대화형 시나리오(CI, cloud-init)에서만 사용.
+# gh auth 없이 클론하려면 GH_TOKEN 또는 --no-run + no-auth 조합이 필요합니다.
+
+# CLI 모드 배포
+GH_TOKEN="$(cat ~/.gh-token)" \
+  curl -fsSL https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/main/dist-service/dist-ss-tui.sh \
+  | bash -s -- -I "https://github.com/org/ops.git" --cli
+
+# dry-run (저장소 동기화만, 배포 없음)
+curl -fsSL https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/main/dist-service/dist-ss-tui.sh \
+  | bash -s -- -I "https://github.com/org/ops.git" --no-run
+```
+
+#### 방법 2: 다운로드 후 실행
+
+```bash
+curl -O https://raw.githubusercontent.com/EDEN-TNS/aitech-aws-common/refs/heads/main/dist-service/dist-ss-tui.sh
+chmod +x dist-ss-tui.sh
+
 # REPL 모드 (기본)
 ./dist-ss-tui.sh
 
