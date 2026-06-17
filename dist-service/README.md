@@ -1,6 +1,6 @@
 # Dist Standard Service — 배포 부트스트랩 시리즈
 
-임의의 Git 저장소 묶음을 클론하고, 필요한 도구(`git` · `gh` · `docker` · `docker compose v2` · `make`)를 자동 설치·검증한 뒤 `docker compose` 스택을 기동하는 범용 부트스트랩 스크립트 2종.
+임의의 Git 저장소 묶음을 클론하고, 필요한 도구(`git` · `gh` · `docker` · `docker compose v2` · `make` · `node` · `python3`)를 자동 설치·검증한 뒤 `docker compose` 스택을 기동하는 범용 부트스트랩 스크립트 2종.
 
 동일한 배포 파이프라인을 **CLI 대화형**과 **REPL 인터랙티브 셸** 두 가지 인터페이스로 제공합니다.
 
@@ -21,6 +21,9 @@
 | 커서 이동 | ✗ | ✓ (←→ 방향키) |
 | 설정 상태 확인 | ✗ | ✓ (`/status`) |
 | Bootstrap 상태 추적 | ✗ | ✓ (`BOOTSTRAP_DONE` 플래그) |
+| Node.js 환경 확인 | ✓ | ✓ |
+| Python3 환경 확인 | ✓ | ✓ |
+| ops dir 없을 때 | warn + 배포 스킵 | warn + 배포 스킵 |
 | 비대화형 CLI 모드 | `--no-run` 조합 | ✓ (`--cli` 플래그 또는 stdin non-tty) |
 | 셸 명령 실행 | Pre-run 커맨드 루프 | `! <cmd>` (언제든) |
 | 종료 | Ctrl+C | `/exit` 또는 Ctrl+C×2 (2초 이내) |
@@ -52,6 +55,17 @@
 | Debian/Ubuntu | `/etc/os-release` ID_LIKE=debian | `apt-get update && apt-get install -y` |
 | Fedora/RHEL/Rocky/AlmaLinux | ID_LIKE=fedora/rhel/centos | `dnf` 또는 `yum` |
 | Arch | ID_LIKE=arch | `pacman -S --noconfirm` |
+
+### 자동 설치 도구
+
+| 도구 | 설치 조건 | 비고 |
+|------|-----------|------|
+| `git` | 없을 경우 | 항상 필요 |
+| `gh` | 없을 경우 | `gh auth` 방식 선택 시 |
+| `docker` + `docker compose v2` | 없을 경우 | Docker 공식 저장소 사용 |
+| `make` | 없을 경우 | Makefile 자동화 |
+| `node` (20 LTS) | 없을 경우 | NodeSource 스크립트 경유 |
+| `python3` | 없을 경우 | `python3-pip`, `python3-venv` 포함 |
 
 ### Docker 설치
 
@@ -138,7 +152,7 @@ LAST_RUN='2026-06-13T10:30:00Z'
 |--------|------|--------|------|
 | `-I`, `--input <repos>` | 공백 구분 Git URL 목록 (따옴표로 묶거나 다중 인자) | — | ✅ |
 | `-w`, `--workspace <dir>` | 클론 대상 디렉터리 | 런타임 메뉴 선택 | ❌ |
-| `-o`, `--ops <name>` | Makefile/compose 보유 저장소 이름 | compose 파일 있는 첫 번째 저장소 자동 감지 | ❌ |
+| `-o`, `--ops <name>` | Makefile 또는 compose 파일 보유 저장소 이름 | Makefile → compose 파일 순서로 자동 감지 | ❌ |
 | `--no-run` | 설치·클론은 수행, compose 메뉴 스킵 | — | ❌ |
 | `-h`, `--help` | 도움말 표시 | — | ❌ |
 
@@ -193,9 +207,12 @@ parse_args       → 인자 파싱 + workspace 결정
                     -w 지정 시: 즉시 사용
                     생략 시: 번호 메뉴 (1) ./ [기본]  2) ../  3) custom)
 detect_os        → OS / pkg manager 식별
-bootstrap_tools  → git, gh, gh-auth 메뉴, docker(+compose v2), make 설치·검증
+bootstrap_tools  → git, gh, gh-auth 메뉴, docker(+compose v2), make, node, python3 설치·검증
 sync_all_repos   → -I 로 받은 모든 repo clone / pull --ff-only
-resolve_ops_dir  → ops 디렉터리 확정 (-o 우선, 없으면 compose 보유 repo 자동)
+                    clone 실패 시 warn + skip (전체 실패 시에만 die)
+resolve_ops_dir  → ops 디렉터리 확정
+                    -o 우선 → Makefile 보유 repo 자동 → compose 파일 보유 repo 자동 → 첫 번째 repo
+                    ops dir 없으면 warn + NO_RUN=1 (die 아님)
 load_compose_files  → docker-compose*.yml / compose*.yml 스캔
                       (Makefile 이미 있으면 스캔 스킵)
 generate_makefile   → Makefile 없으면 compose 파일 기반으로 자동 생성
@@ -436,7 +453,8 @@ URL 직접 지정도 가능합니다:
 | `permission denied while trying to connect to the docker API` | 현재 셸에 `docker` group 미적용. `usermod -aG docker` 후 `sg docker -c "$SHELL"` 서브셸 제안. 또는 로그아웃/로그인. |
 | `docker compose v2 still missing` | `docker-compose-plugin` 미설치. Ubuntu base repo에는 없으므로 스크립트가 Docker 공식 repo로 재설치. 그래도 실패하면 프록시/방화벽으로 `download.docker.com` 차단 여부 확인. |
 | `make … up-xxx` 실패 후 컨테이너 로그가 자동 출력됨 | 의도된 동작 (`dump_unhealthy_logs`). Up+healthy가 아닌 컨테이너의 로그를 tail. 원인 파악 후 재실행. |
-| `Ops dir not found: …` | `-o <name>`이 실제 클론된 디렉터리명과 불일치. `-I` URL의 basename을 확인 (`.git` 제거 후 `basename`). |
+| `! Ops dir not found: … — deployment skipped` | clone 실패 또는 `-o <name>`이 실제 디렉터리명과 불일치. 배포는 건너뛰고(`NO_RUN=1`) env 체크는 계속 진행. URL basename 확인 (`.git` 제거 후 `basename`). |
+| clone 실패 시 다음 repo 계속 진행 | 의도된 동작. 실패 repo는 warn 후 skip, 전체 실패 시에만 종료. |
 | REPL에서 방향키가 `^[[A` 등 이스케이프 문자로 출력됨 | 터미널 에뮬레이터가 ANSI 시퀀스를 지원하지 않음. 다른 터미널 사용 또는 `--cli` 모드로 전환. |
 
 ---

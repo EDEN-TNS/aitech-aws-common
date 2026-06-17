@@ -23,7 +23,11 @@ set -euo pipefail
 WORKSPACE_DIR=""        # parent dir that will hold every cloned repo
 OPS_NAME=""             # which cloned repo is the "ops" project
 declare -a INPUT_REPOS=()
+declare -a SYNCED_NAMES=()
 NO_RUN=0
+OPS_DIR="" CONF_FILE="" DEFAULT_TARGET=""
+DAEMON_NEEDS_SG=0
+OS_KIND="" OS_FAMILY="" PKG_MGR="" PKG_INSTALL=""
 
 # ── Pretty print ─────────────────────────────────────────────────────
 # All status helpers write to stderr so command-substituted callers
@@ -499,6 +503,36 @@ ensure_node() {
   ok "node: $(node --version), npm: $(npm --version)"
 }
 
+install_python_debian() {
+  log "Installing Python3 via apt (Debian/Ubuntu)"
+  sudo apt-get install -y python3 python3-pip python3-venv
+}
+
+install_python_rhel() {
+  log "Installing Python3 via ${PKG_MGR} (RHEL/Fedora)"
+  sudo "${PKG_MGR}" install -y python3 python3-pip
+}
+
+ensure_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    ok "python3: $(python3 --version 2>&1)"; return
+  fi
+  log "Python3 missing — installing"
+  case "${OS_KIND}" in
+    macos) install_pkg "python@3" ;;
+    linux)
+      case "${OS_FAMILY}" in
+        debian) install_python_debian ;;
+        fedora) install_python_rhel ;;
+        arch)   install_pkg "python python-pip" ;;
+        *)      die "Unsupported Linux family for Python3: ${OS_FAMILY}" ;;
+      esac ;;
+    *) die "Unsupported OS for Python3: ${OS_KIND}" ;;
+  esac
+  command -v python3 >/dev/null 2>&1 || die "Python3 install failed"
+  ok "python3: $(python3 --version 2>&1)"
+}
+
 bootstrap_tools() {
   ensure_cmd git
   ensure_cmd gh
@@ -506,6 +540,7 @@ bootstrap_tools() {
   ensure_docker
   ensure_make
   ensure_node
+  ensure_python
 }
 
 # ── Repo helpers ─────────────────────────────────────────────────────
@@ -529,7 +564,15 @@ sync_repo() {
     warn "${target} exists but not a git repo — skipping"
   else
     log "clone ${name} → ${target}"
-    git clone "${url}" "${target}" >&2
+    local tmpf; tmpf="$(mktemp)"; local rc=0
+    git clone "${url}" "${target}" >"${tmpf}" 2>&1 || rc=$?
+    if (( rc != 0 )); then
+      err "Clone failed: ${name}"
+      while IFS= read -r line; do warn "  ${line}"; done < "${tmpf}"
+      rm -f "${tmpf}"
+      return 1
+    fi
+    rm -f "${tmpf}"
   fi
   printf '%s\n' "${name}"
 }
@@ -539,9 +582,10 @@ sync_all_repos() {
   SYNCED_NAMES=()
   local url name
   for url in "${INPUT_REPOS[@]}"; do
-    name="$(sync_repo "${url}")"
+    name="$(sync_repo "${url}")" || { warn "Skipping failed repo: ${url}"; continue; }
     SYNCED_NAMES+=("${name}")
   done
+  [[ ${#SYNCED_NAMES[@]} -gt 0 ]] || die "No repos synced successfully"
   ok "Synced: ${SYNCED_NAMES[*]}"
 }
 
@@ -560,17 +604,22 @@ find_compose_files() {
 
 resolve_ops_dir() {
   if [[ -z "${OPS_NAME}" ]]; then
-    # auto: first repo whose dir (or any subdir) holds a compose file
-    local n
+    local n d
     for n in "${SYNCED_NAMES[@]}"; do
-      if [[ -n "$(find_compose_files "${WORKSPACE_DIR}/${n}" | head -n1)" ]]; then
+      d="${WORKSPACE_DIR}/${n}"
+      [[ -d "${d}" ]] || continue
+      if [[ -f "${d}/Makefile" ]] || [[ -n "$(find_compose_files "${d}" | head -n1)" ]]; then
         OPS_NAME="${n}"; break
       fi
     done
-    [[ -n "${OPS_NAME}" ]] || OPS_NAME="${SYNCED_NAMES[0]}"
+    [[ -n "${OPS_NAME}" ]] || OPS_NAME="${SYNCED_NAMES[0]:-}"
   fi
   OPS_DIR="${WORKSPACE_DIR}/${OPS_NAME}"
-  [[ -d "${OPS_DIR}" ]] || die "Ops dir not found: ${OPS_DIR}"
+  if [[ ! -d "${OPS_DIR}" ]]; then
+    warn "Ops dir not found: ${OPS_DIR} — deployment skipped"
+    NO_RUN=1
+    return 0
+  fi
   CONF_FILE="${OPS_DIR}/.dist-standard.conf"
   ok "Ops project: ${OPS_DIR}"
 }
