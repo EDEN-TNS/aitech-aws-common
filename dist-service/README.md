@@ -47,6 +47,23 @@
 
 두 스크립트가 동일한 로직을 공유합니다.
 
+### 저장소 URL 형식
+
+```
+https://github.com/org/repo.git          # 기본 (기본 브랜치)
+https://github.com/org/repo.git#main     # 브랜치 지정
+https://github.com/org/repo.git#v2.1.0  # 태그 지정
+git@github.com:org/repo.git#production  # SSH + 브랜치 (TUI PAT 모드: HTTPS 자동 변환)
+```
+
+`URL#branch` 형식: `#` 뒤의 값을 `git clone --branch <value>` 로 전달. 디렉터리명은 `#branch` 제거 후 URL basename 사용.
+
+| 입력 URL | 클론 디렉터리 | git clone 인수 |
+|----------|--------------|----------------|
+| `https://github.com/org/api.git` | `api` | (기본 브랜치) |
+| `https://github.com/org/api.git#develop` | `api` | `--branch develop` |
+| `https://github.com/org/api.git#v1.2` | `api` | `--branch v1.2` |
+
 ### OS 감지 및 패키지 매니저
 
 | OS | 감지 조건 | 패키지 매니저 |
@@ -150,7 +167,7 @@ LAST_RUN='2026-06-13T10:30:00Z'
 
 | 플래그 | 설명 | 기본값 | 필수 |
 |--------|------|--------|------|
-| `-I`, `--input <repos>` | 공백 구분 Git URL 목록 (따옴표로 묶거나 다중 인자) | — | ✅ |
+| `-I`, `--input <repos>` | 공백 구분 Git URL 목록. `URL#branch` 형식으로 브랜치 지정 가능 | — | ✅ |
 | `-w`, `--workspace <dir>` | 클론 대상 디렉터리 | 런타임 메뉴 선택 | ❌ |
 | `-o`, `--ops <name>` | Makefile 또는 compose 파일 보유 저장소 이름 | Makefile → compose 파일 순서로 자동 감지 | ❌ |
 | `--no-run` | 설치·클론은 수행, compose 메뉴 스킵 | — | ❌ |
@@ -242,7 +259,7 @@ finalize_docker_access → docker group 미적용 시 sg docker 서브셸 제안
 
 | 플래그 | 설명 | 기본값 |
 |--------|------|--------|
-| `-I`, `--input <repos>` | 공백 구분 Git URL | REPL에서 `/repo`로 입력 |
+| `-I`, `--input <repos>` | 공백 구분 Git URL. `URL#branch` 형식으로 브랜치 지정 가능 | REPL에서 `/repo`로 입력 |
 | `-w`, `--workspace <dir>` | 클론 대상 디렉터리 | REPL에서 `/workspace`로 선택 |
 | `-o`, `--ops <name>` | ops 저장소 이름 | `/bootstrap` 시 자동 감지 |
 | `-c`, `--cli` | 비대화형 CLI 모드 강제 | — |

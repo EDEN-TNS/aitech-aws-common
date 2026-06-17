@@ -544,28 +544,30 @@ bootstrap_tools() {
 }
 
 # ── Repo helpers ─────────────────────────────────────────────────────
-repo_name_from_url() {
-  local u="$1"
-  u="${u%.git}"
-  basename "${u}"
-}
+# URL#branch 형식 지원: repo_url#branch-name
+repo_branch_from_url() { local u="$1"; [[ "${u}" == *#* ]] && printf '%s' "${u##*#}" || printf ''; }
+repo_name_from_url()   { local u="${1%%#*}"; u="${u%.git}"; basename "${u}"; }
 
 sync_repo() {
   local url="$1"
-  local name; name="$(repo_name_from_url "${url}")"
+  local branch; branch="$(repo_branch_from_url "${url}")"
+  local clean_url="${url%%#*}"
+  local name; name="$(repo_name_from_url "${clean_url}")"
   local target="${WORKSPACE_DIR}/${name}"
 
   if [[ -d "${target}/.git" ]]; then
     log "pull ${name}"
+    local cur_branch; cur_branch="${branch:-$(git -C "${target}" symbolic-ref --quiet --short HEAD || echo main)}"
     git -C "${target}" fetch --all --prune >&2
-    local branch; branch="$(git -C "${target}" symbolic-ref --quiet --short HEAD || echo main)"
-    git -C "${target}" pull --ff-only origin "${branch}" >&2 || warn "${name}: pull skipped"
+    git -C "${target}" pull --ff-only origin "${cur_branch}" >&2 || warn "${name}: pull skipped"
   elif [[ -e "${target}" ]]; then
     warn "${target} exists but not a git repo — skipping"
   else
-    log "clone ${name} → ${target}"
+    log "clone ${name}${branch:+ (branch: ${branch})} → ${target}"
+    local -a clone_args=()
+    [[ -n "${branch}" ]] && clone_args+=("--branch" "${branch}")
     local tmpf; tmpf="$(mktemp)"; local rc=0
-    git clone "${url}" "${target}" >"${tmpf}" 2>&1 || rc=$?
+    git clone "${clone_args[@]+"${clone_args[@]}"}" "${clean_url}" "${target}" >"${tmpf}" 2>&1 || rc=$?
     if (( rc != 0 )); then
       err "Clone failed: ${name}"
       while IFS= read -r line; do warn "  ${line}"; done < "${tmpf}"

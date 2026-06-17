@@ -642,10 +642,12 @@ _do_gh_auth() {
 }
 
 # ══ REPO SYNC ══════════════════════════════════════════════════════════
-repo_name_from_url() { local u="${1%.git}"; basename "${u}"; }
+# URL#branch 형식 지원: URL에서 #branch 부분 추출
+repo_branch_from_url() { local u="$1"; [[ "${u}" == *#* ]] && printf '%s' "${u##*#}" || printf ''; }
+repo_name_from_url()   { local u="${1%%#*}"; u="${u%.git}"; basename "${u}"; }
 
 ssh_to_https() {
-  local url="$1"
+  local url="${1%%#*}"  # strip #branch before converting
   [[ "${url}" =~ ^git@([^:]+):(.+)$ ]] \
     && printf 'https://%s/%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" \
     || printf '%s' "${url}"
@@ -653,10 +655,12 @@ ssh_to_https() {
 
 sync_repo() {
   local url="$1"
-  local name; name="$(repo_name_from_url "${url}")"
+  local branch; branch="$(repo_branch_from_url "${url}")"
+  local clean_url="${url%%#*}"
+  local name; name="$(repo_name_from_url "${clean_url}")"
   local target="${WORKSPACE_DIR}/${name}"
   local -a git_opts=()
-  local clone_url="${url}"
+  local clone_url="${clean_url}"
 
   if [[ "${AUTH_METHOD}" == "pat" && -n "${_PAT_CRED_FILE}" ]]; then
     clone_url="$(ssh_to_https "${url}")"
@@ -667,21 +671,23 @@ sync_repo() {
 
   if [[ -d "${target}/.git" ]]; then
     clog "Pulling ${name}…"
-    local branch; branch="$(git -C "${target}" symbolic-ref --quiet --short HEAD 2>/dev/null || echo main)"
+    local cur_branch; cur_branch="${branch:-$(git -C "${target}" symbolic-ref --quiet --short HEAD 2>/dev/null || echo main)}"
     git ${git_opts+"${git_opts[@]}"} -C "${target}" fetch --all --prune >"${tmpf}" 2>&1 || true
-    git ${git_opts+"${git_opts[@]}"} -C "${target}" pull --ff-only origin "${branch}" >>"${tmpf}" 2>&1 || rc=$?
-    (( rc == 0 )) && cok "Pulled: ${name}" || cwarn "${name}: pull skipped (rc=${rc})"
+    git ${git_opts+"${git_opts[@]}"} -C "${target}" pull --ff-only origin "${cur_branch}" >>"${tmpf}" 2>&1 || rc=$?
+    (( rc == 0 )) && cok "Pulled: ${name}${branch:+ (${branch})}" || cwarn "${name}: pull skipped (rc=${rc})"
   elif [[ -e "${target}" ]]; then
     cwarn "${target} exists but not a git repo — skipping"
   else
-    clog "Cloning ${name}…"
-    git ${git_opts+"${git_opts[@]}"} clone "${clone_url}" "${target}" >"${tmpf}" 2>&1 || rc=$?
+    clog "Cloning ${name}${branch:+ (branch: ${branch})}…"
+    local -a clone_args=()
+    [[ -n "${branch}" ]] && clone_args+=("--branch" "${branch}")
+    git ${git_opts+"${git_opts[@]}"} clone "${clone_args[@]+"${clone_args[@]}"}" "${clone_url}" "${target}" >"${tmpf}" 2>&1 || rc=$?
     if (( rc != 0 )); then
       cerr "Clone failed: ${name}"
       while IFS= read -r line; do cwarn "  ${line}"; done < "${tmpf}"
       rm -f "${tmpf}"; die "Clone failed for ${name}"
     fi
-    cok "Cloned: ${name}"
+    cok "Cloned: ${name}${branch:+ (${branch})}"
   fi
   rm -f "${tmpf}"
   printf '%s\n' "${name}"
