@@ -467,12 +467,45 @@ ensure_make() {
   command -v make >/dev/null 2>&1 || die "make install failed"
 }
 
+install_node_debian() {
+  log "Installing Node.js 20 LTS via NodeSource (Debian/Ubuntu)"
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+  sudo apt-get install -y nodejs
+}
+
+install_node_rhel() {
+  log "Installing Node.js 20 LTS via NodeSource (RHEL/Fedora)"
+  curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo -E bash -
+  sudo "${PKG_MGR}" install -y nodejs
+}
+
+ensure_node() {
+  if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    ok "node: $(node --version), npm: $(npm --version)"; return
+  fi
+  log "Node.js missing — installing Node.js 20 LTS"
+  case "${OS_KIND}" in
+    macos) install_pkg "node@20" ;;
+    linux)
+      case "${OS_FAMILY}" in
+        debian) install_node_debian ;;
+        fedora) install_node_rhel ;;
+        arch)   install_pkg "nodejs npm" ;;
+        *)      die "Unsupported Linux family for Node.js: ${OS_FAMILY}" ;;
+      esac ;;
+    *) die "Unsupported OS for Node.js: ${OS_KIND}" ;;
+  esac
+  command -v node >/dev/null 2>&1 || die "Node.js install failed"
+  ok "node: $(node --version), npm: $(npm --version)"
+}
+
 bootstrap_tools() {
   ensure_cmd git
   ensure_cmd gh
   ensure_gh_auth
   ensure_docker
   ensure_make
+  ensure_node
 }
 
 # ── Repo helpers ─────────────────────────────────────────────────────

@@ -582,6 +582,38 @@ ensure_make() {
   command -v make >/dev/null 2>&1 || die "make install failed"
 }
 
+install_node_debian() {
+  clog "Installing Node.js 20 LTS via NodeSource (Debian/Ubuntu)"
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+  sudo apt-get install -y nodejs
+}
+
+install_node_rhel() {
+  clog "Installing Node.js 20 LTS via NodeSource (RHEL/Fedora)"
+  curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo -E bash -
+  sudo "${PKG_MGR}" install -y nodejs
+}
+
+ensure_node() {
+  if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    ok "node: $(node --version), npm: $(npm --version)"; return
+  fi
+  clog "Node.js missing — installing Node.js 20 LTS"
+  case "${OS_KIND}" in
+    macos) install_pkg "node@20" ;;
+    linux)
+      case "${OS_FAMILY}" in
+        debian) install_node_debian ;;
+        fedora) install_node_rhel ;;
+        arch)   install_pkg "nodejs npm" ;;
+        *)      die "Unsupported Linux family for Node.js: ${OS_FAMILY}" ;;
+      esac ;;
+    *) die "Unsupported OS for Node.js: ${OS_KIND}" ;;
+  esac
+  command -v node >/dev/null 2>&1 || die "Node.js install failed"
+  cok "node: $(node --version), npm: $(npm --version)"
+}
+
 # ══ GH AUTH ════════════════════════════════════════════════════════════
 _do_gh_auth() {
   if ! command -v gh >/dev/null 2>&1; then
@@ -951,11 +983,17 @@ handle_auth() {
     clog "PAT 입력 (GitHub → Settings → Developer settings → Personal access tokens)"
     cprint "${C_DIM}  최소 권한: Contents → Read-only${C_RST}"
     printf '\n'
+    local _pat_empty=0
     while true; do
       cinput "GitHub Username (선택사항):" GITHUB_USERNAME
       cinput "Personal Access Token:" GITHUB_PAT "secret"
-      [[ -n "${GITHUB_PAT}" ]] && break
-      cwarn "PAT가 비어있습니다. 다시 입력하세요."
+      if [[ -n "${GITHUB_PAT}" ]]; then _pat_empty=0; break; fi
+      (( _pat_empty++ ))
+      if (( _pat_empty >= 2 )); then
+        cwarn "PAT 입력 취소 — auth 방식을 none으로 변경합니다."
+        AUTH_METHOD="none"; cache_save; return 0
+      fi
+      cwarn "PAT가 비어있습니다. 한 번 더 빈 Enter 시 취소."
     done
     _PAT_CRED_FILE="$(mktemp)"; chmod 600 "${_PAT_CRED_FILE}"
     if [[ -n "${GITHUB_USERNAME}" ]]; then
@@ -977,7 +1015,7 @@ handle_bootstrap() {
   else
     ensure_cmd git
   fi
-  ensure_docker; ensure_make
+  ensure_docker; ensure_make; ensure_node
 
   if [[ ${#INPUT_REPOS[@]} -eq 0 ]]; then
     cwarn "저장소가 없습니다. /repo 로 추가 후 다시 실행하세요."
@@ -1073,20 +1111,25 @@ handle_dist_run() {
   printf '  Command : %s%smake %s%s\n' "${C_GREEN}" "${C_BOLD}" "${target}" "${C_RST}"
   printf '  Dir     : %s\n\n' "${OPS_DIR}"
 
-  clog "Pre-run 명령어 (선택, 빈 Enter → 건너뜀)"
+  clog "Pre-run 명령어 (선택, 빈 Enter 2회 → 건너뜀)"
+  local _pre_empty=0
   while true; do
     local ucmd=""
     cinput "Command:" ucmd
-    [[ -z "${ucmd}" ]] && break
-    clog "Running: ${ucmd}"
-    local rc=0 tmpf; tmpf="$(mktemp)"
-    if [[ "${OS_KIND}" == "linux" && "${DAEMON_NEEDS_SG:-0}" -eq 1 ]] && command -v sg >/dev/null 2>&1; then
-      sg docker -c "cd \"${OPS_DIR}\" && ${ucmd}" >"${tmpf}" 2>&1 || rc=$?
-    else
-      ( cd "${OPS_DIR}" && bash -c "${ucmd}" ) >"${tmpf}" 2>&1 || rc=$?
+    if [[ -z "${ucmd}" ]]; then
+      (( _pre_empty++ ))
+      if (( _pre_empty >= 2 )); then break; fi
+      cwarn "한 번 더 빈 Enter 시 건너뜀"
+      continue
     fi
-    while IFS= read -r line; do cprint "  ${line}"; done < "${tmpf}"
-    rm -f "${tmpf}"
+    _pre_empty=0
+    clog "Running: ${ucmd}"
+    local rc=0
+    if [[ "${OS_KIND}" == "linux" && "${DAEMON_NEEDS_SG:-0}" -eq 1 ]] && command -v sg >/dev/null 2>&1; then
+      sg docker -c "cd \"${OPS_DIR}\" && ${ucmd}" || rc=$?
+    else
+      ( cd "${OPS_DIR}" && bash -c "${ucmd}" ) || rc=$?
+    fi
     (( rc != 0 )) && cwarn "Exited ${rc}" || cok "Done"
   done
 
@@ -1190,7 +1233,7 @@ run_cli_mode() {
 
   detect_os; ensure_cmd git
   [[ "${AUTH_METHOD}" == "gh" ]] && { ensure_cmd gh; gh auth status >/dev/null 2>&1 || die "gh CLI not logged in"; }
-  ensure_docker; ensure_make
+  ensure_docker; ensure_make; ensure_node
 
   clog "Syncing repositories…"
   sync_all_repos; resolve_ops_dir; load_compose_files; generate_makefile
